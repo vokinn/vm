@@ -1,4 +1,7 @@
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    str::{FromStr, SplitWhitespace},
+};
 
 const MAX_LOCALS: usize = 64;
 
@@ -44,10 +47,32 @@ enum VmError {
 }
 
 #[derive(Debug)]
+enum ExpectedKind {
+    I64,
+    Usize,
+}
+
+trait RepresentableType {
+    fn kind() -> ExpectedKind;
+}
+
+impl RepresentableType for i64 {
+    fn kind() -> ExpectedKind {
+        ExpectedKind::I64
+    }
+}
+
+impl RepresentableType for usize {
+    fn kind() -> ExpectedKind {
+        ExpectedKind::Usize
+    }
+}
+
+#[derive(Debug)]
 enum ParserError {
     ExpectedValue,
-    ExpectedI64,
-    ExpectedUsize,
+    ExpectedType(ExpectedKind),
+    UnknownInstruction(String),
 }
 
 impl<'a> Vm<'a, Unparsed> {
@@ -61,12 +86,17 @@ impl<'a> Vm<'a, Unparsed> {
             _state: PhantomData,
         }
     }
-    //
-    // fn parse_i64(num_string: &str) -> Result<i64, ParserError> {
-    //     num_string
-    //         .parse::<i64>()
-    //         .map_err(|_| ParserError::ExpectedI64)
-    // }
+
+    fn parse_t<T: FromStr + RepresentableType>(
+        &self,
+        num_string: &mut SplitWhitespace,
+    ) -> Result<T, ParserError> {
+        num_string
+            .next()
+            .ok_or(ParserError::ExpectedValue)?
+            .parse::<T>()
+            .map_err(|_| ParserError::ExpectedType(T::kind()))
+    }
 
     fn parse(mut self) -> Result<Vm<'a, Parsed>, ParserError> {
         for line in self.source.lines() {
@@ -74,15 +104,9 @@ impl<'a> Vm<'a, Unparsed> {
 
             if let Some(opcode) = tokens.next() {
                 match opcode {
-                    "push" => {
-                        let value = tokens
-                            .next()
-                            .ok_or(ParserError::ExpectedValue)?
-                            .parse::<i64>()
-                            .map_err(|_| ParserError::ExpectedI64)?;
-
-                        self.program.push(Opcode::Push(value));
-                    }
+                    "push" => self
+                        .program
+                        .push(Opcode::Push(self.parse_t::<i64>(&mut tokens)?)),
 
                     "add" => self.program.push(Opcode::Add),
                     "subtract" => self.program.push(Opcode::Subtract),
@@ -93,49 +117,25 @@ impl<'a> Vm<'a, Unparsed> {
                     "debug" => self.program.push(Opcode::Debug),
                     "duplicate" => self.program.push(Opcode::Duplicate),
 
-                    "load" => {
-                        let value = tokens
-                            .next()
-                            .ok_or(ParserError::ExpectedValue)?
-                            .parse::<usize>()
-                            .map_err(|_| ParserError::ExpectedUsize)?;
+                    "load" => self
+                        .program
+                        .push(Opcode::Load(self.parse_t::<usize>(&mut tokens)?)),
 
-                        self.program.push(Opcode::Load(value));
-                    }
+                    "store" => self
+                        .program
+                        .push(Opcode::Store(self.parse_t::<usize>(&mut tokens)?)),
 
-                    "store" => {
-                        let value = tokens
-                            .next()
-                            .ok_or(ParserError::ExpectedValue)?
-                            .parse::<usize>()
-                            .map_err(|_| ParserError::ExpectedUsize)?;
+                    "jump" => self
+                        .program
+                        .push(Opcode::Jump(self.parse_t::<usize>(&mut tokens)?)),
 
-                        self.program.push(Opcode::Store(value));
-                    }
-
-                    "jump" => {
-                        let value = tokens
-                            .next()
-                            .ok_or(ParserError::ExpectedValue)?
-                            .parse::<usize>()
-                            .map_err(|_| ParserError::ExpectedUsize)?;
-
-                        self.program.push(Opcode::Jump(value));
-                    }
-
-                    "jumpifzero" => {
-                        let value = tokens
-                            .next()
-                            .ok_or(ParserError::ExpectedValue)?
-                            .parse::<usize>()
-                            .map_err(|_| ParserError::ExpectedUsize)?;
-
-                        self.program.push(Opcode::JumpIfZero(value));
-                    }
+                    "jumpifzero" => self
+                        .program
+                        .push(Opcode::JumpIfZero(self.parse_t::<usize>(&mut tokens)?)),
 
                     "halt" => self.program.push(Opcode::Halt),
 
-                    _ => (),
+                    _ => return Err(ParserError::UnknownInstruction(opcode.to_string())),
                 }
             }
         }
