@@ -19,7 +19,7 @@ fn main() {
         store 0
         jump two
         end: halt
-        ";
+    ";
 
     let vm = Vm::new(source);
 
