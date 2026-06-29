@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     marker::PhantomData,
     str::{FromStr, SplitWhitespace},
 };
@@ -36,6 +37,7 @@ struct Vm<'a, T> {
     source: &'a str,
     ip: usize,
 
+    labels: HashMap<String, usize>,
     _state: PhantomData<T>,
 }
 
@@ -50,6 +52,7 @@ enum VmError {
 enum ExpectedKind {
     I64,
     Usize,
+    String,
 }
 
 trait RepresentableType {
@@ -68,11 +71,29 @@ impl RepresentableType for usize {
     }
 }
 
+impl RepresentableType for String {
+    fn kind() -> ExpectedKind {
+        ExpectedKind::String
+    }
+}
+
 #[derive(Debug)]
 enum ParserError {
     ExpectedValue,
     ExpectedType(ExpectedKind),
     UnknownInstruction(String),
+    UnknownLabel(String),
+}
+
+impl std::fmt::Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParserError::ExpectedValue => write!(f, "expected a value argument"),
+            ParserError::ExpectedType(kind) => write!(f, "expected type {:?}", kind),
+            ParserError::UnknownInstruction(inst) => write!(f, "unknown instruction {}", inst),
+            ParserError::UnknownLabel(label) => write!(f, "unknown label {}", label),
+        }
+    }
 }
 
 impl<'a> Vm<'a, Unparsed> {
@@ -83,6 +104,8 @@ impl<'a> Vm<'a, Unparsed> {
             program: vec![],
             source,
             ip: 0,
+
+            labels: HashMap::new(),
             _state: PhantomData,
         }
     }
@@ -99,11 +122,36 @@ impl<'a> Vm<'a, Unparsed> {
     }
 
     fn parse(mut self) -> Result<Vm<'a, Parsed>, ParserError> {
+        let mut forward_decls: HashMap<String, Vec<usize>> = HashMap::new();
+
         for line in self.source.lines() {
             let mut tokens = line.split_whitespace();
 
-            if let Some(opcode) = tokens.next() {
-                match opcode {
+            if let Some(mut first_token) = tokens.next() {
+                if first_token.ends_with(':') {
+                    let label_name = first_token[..first_token.len() - 1].to_string();
+                    let label_address = self.program.len();
+                    self.labels.insert(label_name.clone(), label_address);
+
+                    if let Some(pending_indices) = forward_decls.remove(&label_name) {
+                        for index in pending_indices {
+                            match &mut self.program[index] {
+                                Opcode::Jump(addr) | Opcode::JumpIfZero(addr) => {
+                                    *addr = label_address
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    if let Some(next_token) = tokens.next() {
+                        first_token = next_token;
+                    } else {
+                        continue;
+                    }
+                }
+
+                match first_token {
                     "push" => self
                         .program
                         .push(Opcode::Push(self.parse_t::<i64>(&mut tokens)?)),
@@ -125,19 +173,38 @@ impl<'a> Vm<'a, Unparsed> {
                         .program
                         .push(Opcode::Store(self.parse_t::<usize>(&mut tokens)?)),
 
-                    "jump" => self
-                        .program
-                        .push(Opcode::Jump(self.parse_t::<usize>(&mut tokens)?)),
+                    "jump" => {
+                        let label = self.parse_t::<String>(&mut tokens)?;
+                        let current_idx = self.program.len();
 
-                    "jumpifzero" => self
-                        .program
-                        .push(Opcode::JumpIfZero(self.parse_t::<usize>(&mut tokens)?)),
+                        if let Some(&address) = self.labels.get(&label) {
+                            self.program.push(Opcode::Jump(address));
+                        } else {
+                            forward_decls.entry(label).or_default().push(current_idx);
+                            self.program.push(Opcode::Jump(0));
+                        }
+                    }
+
+                    "jumpifzero" => {
+                        let label = self.parse_t::<String>(&mut tokens)?;
+                        let current_idx = self.program.len();
+
+                        if let Some(&address) = self.labels.get(&label) {
+                            self.program.push(Opcode::JumpIfZero(address));
+                        } else {
+                            forward_decls.entry(label).or_default().push(current_idx);
+                            self.program.push(Opcode::JumpIfZero(0));
+                        }
+                    }
 
                     "halt" => self.program.push(Opcode::Halt),
-
-                    _ => return Err(ParserError::UnknownInstruction(opcode.to_string())),
+                    other => return Err(ParserError::UnknownInstruction(other.to_string())),
                 }
             }
+        }
+
+        if let Some((missing_label, _)) = forward_decls.into_iter().next() {
+            return Err(ParserError::UnknownLabel(missing_label));
         }
 
         Ok(Vm {
@@ -147,6 +214,7 @@ impl<'a> Vm<'a, Unparsed> {
             source: self.source,
             ip: self.ip,
 
+            labels: self.labels,
             _state: PhantomData::<Parsed>,
         })
     }
@@ -243,14 +311,17 @@ impl<'a> Vm<'a, Parsed> {
 fn main() {
     let source = "
         push 5
-        push 6
-        push 7
-        add
+        store 0
+        two: load 0
+        duplicate
+        jumpifzero end
         print
-        push 8
+        load 0
+        push 1
         subtract
-        print
-        halt
+        store 0
+        jump two
+        end: halt
         ";
 
     let vm = Vm::new(source);
