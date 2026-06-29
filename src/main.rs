@@ -1,8 +1,9 @@
 #![feature(decl_macro)]
+use crate::parser::Parser;
 
-use crate::vm::Vm;
 mod errors;
 mod instruction;
+mod parser;
 mod vm;
 
 fn main() {
@@ -21,8 +22,8 @@ fn main() {
         end: halt
     ";
 
-    let vm = Vm::new(source);
+    let parser = Parser::new(source);
+    let mut vm = parser.parse().unwrap();
 
-    let mut parsed_vm = vm.parse().unwrap();
-    parsed_vm.run().unwrap();
+    vm.run().unwrap();
 }
