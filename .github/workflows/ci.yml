@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: fmt
+        run: nix develop --command cargo fmt --check
+
+      - name: clippy
+        run: nix develop --command cargo clippy -- -D warnings
+
+      - name: test
+        run: nix develop --command cargo test

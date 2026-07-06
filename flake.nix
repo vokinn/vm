@@ -31,7 +31,6 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = [
           toolchain
-          pkgs.cargo
         ];
 
         RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/src";
