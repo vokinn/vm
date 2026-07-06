@@ -1,6 +1,22 @@
-use crate::{errors::VmError, instruction::Opcode};
+use crate::instruction::Opcode;
+use thiserror::Error;
 
 const MAX_LOCALS: usize = 64;
+
+#[derive(Error, Debug)]
+pub enum VmError {
+    #[error("stack is empty")]
+    StackEmpty,
+
+    #[error("call stack is empty")]
+    CallStackEmpty,
+
+    #[error("invalid variable")]
+    InvalidVariable,
+
+    #[error("division by zero")]
+    DivByZero,
+}
 
 struct Frame {
     return_addr: usize,

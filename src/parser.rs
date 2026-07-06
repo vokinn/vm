@@ -1,13 +1,29 @@
+use crate::{
+    instruction::{ExpectedKind, Opcode, RepresentableType},
+    vm::Vm,
+};
+
 use std::{
     collections::HashMap,
     str::{FromStr, SplitWhitespace},
 };
 
-use crate::{
-    errors::ParserError,
-    instruction::{Opcode, RepresentableType},
-    vm::Vm,
-};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ParserError {
+    #[error("expected a value argument")]
+    ExpectedValue,
+
+    #[error("expected type {0:?}")]
+    ExpectedType(ExpectedKind),
+
+    #[error("unknown instruction {0}")]
+    UnknownInstruction(String),
+
+    #[error("unknown label {0}")]
+    UnknownLabel(String),
+}
 
 pub struct Parser<'a> {
     source: &'a str,

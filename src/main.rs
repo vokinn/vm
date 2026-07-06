@@ -1,7 +1,6 @@
 #![feature(decl_macro)]
 use crate::parser::Parser;
 
-mod errors;
 mod instruction;
 mod parser;
 mod vm;
