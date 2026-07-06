@@ -3,6 +3,7 @@ use crate::instruction::ExpectedKind;
 #[derive(Debug)]
 pub enum VmError {
     StackEmpty,
+    CallStackEmpty,
     InvalidVariable,
     DivByZero,
 }

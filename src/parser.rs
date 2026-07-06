@@ -111,6 +111,22 @@ impl<'a> Parser<'a> {
                         }
                     }
 
+                    "call" => {
+                        let label = self.parse_t::<String>(&mut tokens)?;
+                        let current_idx = self.program.len();
+
+                        let num_args = self.parse_t::<usize>(&mut tokens)?;
+
+                        if let Some(&address) = self.labels.get(&label) {
+                            self.program.push(Opcode::Call(address, num_args));
+                        } else {
+                            forward_decls.entry(label).or_default().push(current_idx);
+                            self.program.push(Opcode::Call(0, num_args));
+                        }
+                    }
+
+                    "return" => self.program.push(Opcode::Return),
+
                     "halt" => self.program.push(Opcode::Halt),
                     other => return Err(ParserError::UnknownInstruction(other.to_string())),
                 }

@@ -8,18 +8,28 @@ mod vm;
 
 fn main() {
     let source = "
-        push 5
-        store 0
-        two: load 0
-        duplicate
-        jumpifzero end
-        print
-        load 0
-        push 1
-        subtract
-        store 0
-        jump two
-        end: halt
+        jump main
+
+        factorial:
+            load 0
+            jumpifzero base
+            load 0
+            load 0
+            push 1
+            subtract
+            call factorial 1
+            multiply
+            return
+
+        base:
+            push 1
+            return
+
+        main:
+            push 5
+            call factorial 1
+            print
+            halt
     ";
 
     let parser = Parser::new(source);
