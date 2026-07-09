@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_t<T>(&self, num_string: &mut SplitWhitespace) -> Result<T, ParserError>
+    fn next_arg<T>(&self, num_string: &mut SplitWhitespace) -> Result<T, ParserError>
     where
         T: FromStr + RepresentableType,
     {
@@ -66,9 +66,10 @@ impl<'a> Parser<'a> {
                     if let Some(pending_indices) = forward_decls.remove(&label_name) {
                         for index in pending_indices {
                             match &mut self.program[index] {
-                                Opcode::Jump(addr) | Opcode::JumpIfZero(addr) => {
-                                    *addr = label_address
-                                }
+                                Opcode::Jump(addr)
+                                | Opcode::JumpIfZero(addr)
+                                | Opcode::Call(addr, _) => *addr = label_address,
+
                                 _ => {}
                             }
                         }
@@ -84,7 +85,7 @@ impl<'a> Parser<'a> {
                 match first_token {
                     "push" => self
                         .program
-                        .push(Opcode::Push(self.parse_t::<i64>(&mut tokens)?)),
+                        .push(Opcode::Push(self.next_arg::<i64>(&mut tokens)?)),
 
                     "add" => self.program.push(Opcode::Add),
                     "subtract" => self.program.push(Opcode::Subtract),
@@ -97,14 +98,14 @@ impl<'a> Parser<'a> {
 
                     "load" => self
                         .program
-                        .push(Opcode::Load(self.parse_t::<usize>(&mut tokens)?)),
+                        .push(Opcode::Load(self.next_arg::<usize>(&mut tokens)?)),
 
                     "store" => self
                         .program
-                        .push(Opcode::Store(self.parse_t::<usize>(&mut tokens)?)),
+                        .push(Opcode::Store(self.next_arg::<usize>(&mut tokens)?)),
 
                     "jump" => {
-                        let label = self.parse_t::<String>(&mut tokens)?;
+                        let label = self.next_arg::<String>(&mut tokens)?;
                         let current_idx = self.program.len();
 
                         if let Some(&address) = self.labels.get(&label) {
@@ -116,7 +117,7 @@ impl<'a> Parser<'a> {
                     }
 
                     "jumpifzero" => {
-                        let label = self.parse_t::<String>(&mut tokens)?;
+                        let label = self.next_arg::<String>(&mut tokens)?;
                         let current_idx = self.program.len();
 
                         if let Some(&address) = self.labels.get(&label) {
@@ -128,10 +129,10 @@ impl<'a> Parser<'a> {
                     }
 
                     "call" => {
-                        let label = self.parse_t::<String>(&mut tokens)?;
+                        let label = self.next_arg::<String>(&mut tokens)?;
                         let current_idx = self.program.len();
 
-                        let num_args = self.parse_t::<usize>(&mut tokens)?;
+                        let num_args = self.next_arg::<usize>(&mut tokens)?;
 
                         if let Some(&address) = self.labels.get(&label) {
                             self.program.push(Opcode::Call(address, num_args));
