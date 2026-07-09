@@ -11,7 +11,7 @@ use std::{
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ParserError {
+pub enum ParseError {
     #[error("expected a value argument")]
     ExpectedValue,
 
@@ -40,18 +40,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn next_arg<T>(&self, num_string: &mut SplitWhitespace) -> Result<T, ParserError>
+    fn next_arg<T>(&self, num_string: &mut SplitWhitespace) -> Result<T, ParseError>
     where
         T: FromStr + RepresentableType,
     {
         num_string
             .next()
-            .ok_or(ParserError::ExpectedValue)?
+            .ok_or(ParseError::ExpectedValue)?
             .parse::<T>()
-            .map_err(|_| ParserError::ExpectedType(T::kind()))
+            .map_err(|_| ParseError::ExpectedType(T::kind()))
     }
 
-    pub fn parse(mut self) -> Result<Vm, ParserError> {
+    pub fn parse(mut self) -> Result<Vm, ParseError> {
         let mut forward_decls: HashMap<String, Vec<usize>> = HashMap::new();
 
         for line in self.source.lines() {
@@ -145,13 +145,13 @@ impl<'a> Parser<'a> {
                     "return" => self.program.push(Opcode::Return),
 
                     "halt" => self.program.push(Opcode::Halt),
-                    other => return Err(ParserError::UnknownInstruction(other.to_string())),
+                    other => return Err(ParseError::UnknownInstruction(other.to_string())),
                 }
             }
         }
 
         if let Some((missing_label, _)) = forward_decls.into_iter().next() {
-            return Err(ParserError::UnknownLabel(missing_label));
+            return Err(ParseError::UnknownLabel(missing_label));
         }
 
         Ok(Vm::new(self.program))
