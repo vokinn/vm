@@ -24,10 +24,10 @@ struct Frame {
 }
 
 impl Frame {
-    fn new(return_addr: usize, capacity: usize) -> Self {
+    fn new(return_addr: usize, num_args: usize) -> Self {
         Self {
             return_addr,
-            locals: Vec::with_capacity(capacity),
+            locals: vec![0; num_args],
         }
     }
 }
@@ -100,10 +100,14 @@ impl Vm {
 
             Opcode::Store(n) => {
                 let top = self.operand_stack.pop().ok_or(VmError::StackEmpty)?;
-                self.call_stack
+                let locals = &mut self
+                    .call_stack
                     .last_mut()
                     .ok_or(VmError::CallStackEmpty)?
-                    .locals[n] = top;
+                    .locals;
+
+                let slot = locals.get_mut(n).ok_or(VmError::InvalidVariable)?;
+                *slot = top;
             }
 
             Opcode::Load(n) => {
@@ -137,9 +141,8 @@ impl Vm {
                     };
                 }
 
-                Opcode::Call(fn_addr, num_args) => {
+                Opcode::Call(fn_addr, num_args, _) => {
                     let mut frame = Frame::new(self.ip, num_args);
-                    frame.locals.resize(num_args, 0);
 
                     for i in (0..num_args).rev() {
                         frame.locals[i] = self.operand_stack.pop().ok_or(VmError::StackEmpty)?;

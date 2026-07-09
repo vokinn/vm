@@ -18,7 +18,7 @@ pub enum Opcode {
     Load(usize),
     Store(usize),
 
-    Call(usize, usize),
+    Call(usize, usize, usize),
     Return,
 }
 
