@@ -11,7 +11,7 @@ use std::{
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ParseError {
+pub enum ParseError<'a> {
     #[error("expected a value argument")]
     ExpectedValue,
 
@@ -19,16 +19,16 @@ pub enum ParseError {
     ExpectedType(ExpectedKind),
 
     #[error("unknown instruction {0}")]
-    UnknownInstruction(String),
+    UnknownInstruction(&'a str),
 
     #[error("unknown label {0}")]
-    UnknownLabel(String),
+    UnknownLabel(&'a str),
 }
 
 pub struct Parser<'a> {
     source: &'a str,
     program: Vec<Opcode>,
-    labels: HashMap<String, usize>,
+    labels: HashMap<&'a str, usize>,
 }
 
 impl<'a> Parser<'a> {
@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn next_arg<T>(&self, num_string: &mut SplitWhitespace) -> Result<T, ParseError>
+    fn next_arg<T>(&self, num_string: &mut SplitWhitespace) -> Result<T, ParseError<'a>>
     where
         T: FromStr + RepresentableType,
     {
@@ -51,19 +51,19 @@ impl<'a> Parser<'a> {
             .map_err(|_| ParseError::ExpectedType(T::kind()))
     }
 
-    pub fn parse(mut self) -> Result<Vm, ParseError> {
-        let mut forward_decls: HashMap<String, Vec<usize>> = HashMap::new();
+    pub fn parse(mut self) -> Result<Vm, ParseError<'a>> {
+        let mut forward_decls: HashMap<&'a str, Vec<usize>> = HashMap::new();
 
         for line in self.source.lines() {
             let mut tokens = line.split_whitespace();
 
             if let Some(mut first_token) = tokens.next() {
                 if first_token.ends_with(':') {
-                    let label_name = first_token[..first_token.len() - 1].to_string();
+                    let label_name = &first_token[..first_token.len() - 1];
                     let label_address = self.program.len();
-                    self.labels.insert(label_name.clone(), label_address);
+                    self.labels.insert(label_name, label_address);
 
-                    if let Some(pending_indices) = forward_decls.remove(&label_name) {
+                    if let Some(pending_indices) = forward_decls.remove(label_name) {
                         for index in pending_indices {
                             match &mut self.program[index] {
                                 Opcode::Jump(addr)
@@ -105,10 +105,10 @@ impl<'a> Parser<'a> {
                         .push(Opcode::Store(self.next_arg::<usize>(&mut tokens)?)),
 
                     "jump" => {
-                        let label = self.next_arg::<String>(&mut tokens)?;
+                        let label = tokens.next().ok_or(ParseError::ExpectedValue)?;
                         let current_idx = self.program.len();
 
-                        if let Some(&address) = self.labels.get(&label) {
+                        if let Some(&address) = self.labels.get(label) {
                             self.program.push(Opcode::Jump(address));
                         } else {
                             forward_decls.entry(label).or_default().push(current_idx);
@@ -117,10 +117,10 @@ impl<'a> Parser<'a> {
                     }
 
                     "jumpifzero" => {
-                        let label = self.next_arg::<String>(&mut tokens)?;
+                        let label = tokens.next().ok_or(ParseError::ExpectedValue)?;
                         let current_idx = self.program.len();
 
-                        if let Some(&address) = self.labels.get(&label) {
+                        if let Some(&address) = self.labels.get(label) {
                             self.program.push(Opcode::JumpIfZero(address));
                         } else {
                             forward_decls.entry(label).or_default().push(current_idx);
@@ -129,12 +129,12 @@ impl<'a> Parser<'a> {
                     }
 
                     "call" => {
-                        let label = self.next_arg::<String>(&mut tokens)?;
+                        let label = tokens.next().ok_or(ParseError::ExpectedValue)?;
                         let current_idx = self.program.len();
 
                         let num_args = self.next_arg::<usize>(&mut tokens)?;
 
-                        if let Some(&address) = self.labels.get(&label) {
+                        if let Some(&address) = self.labels.get(label) {
                             self.program.push(Opcode::Call(address, num_args));
                         } else {
                             forward_decls.entry(label).or_default().push(current_idx);
@@ -145,7 +145,7 @@ impl<'a> Parser<'a> {
                     "return" => self.program.push(Opcode::Return),
 
                     "halt" => self.program.push(Opcode::Halt),
-                    other => return Err(ParseError::UnknownInstruction(other.to_string())),
+                    other => return Err(ParseError::UnknownInstruction(other)),
                 }
             }
         }

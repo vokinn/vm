@@ -26,7 +26,6 @@ pub enum Opcode {
 pub enum ExpectedKind {
     I64,
     Usize,
-    String,
 }
 
 pub trait RepresentableType {
@@ -46,5 +45,4 @@ pub macro impl_representable($($type:ty => $kind:ident),* $(,)?) {
 impl_representable!(
     i64 => I64,
     usize => Usize,
-    String => String,
 );
